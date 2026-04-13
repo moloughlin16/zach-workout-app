@@ -41,7 +41,7 @@ export interface WorkoutLog {
 }
 
 // Activity types (climbing, biking)
-export type ActivityType = 'climbing' | 'biking';
+export type ActivityType = 'climbing' | 'biking' | 'run' | 'walk' | 'jump-rope' | 'stretch';
 export type ClimbingType = 'boulder' | 'sport' | 'trad' | 'top-rope';
 export type ClimbingLocation = 'indoor' | 'outdoor';
 

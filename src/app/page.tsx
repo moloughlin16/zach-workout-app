@@ -24,34 +24,68 @@ export default function WorkoutPage() {
   const [exercises, setExercises] = useState<LoggedExercise[]>([]);
   const [activeWorkoutId, setActiveWorkoutId] = useState<number | null>(null);
   const [showPicker, setShowPicker] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
   const today = new Date().toISOString().split("T")[0];
+  const isPastDate = selectedDate !== today;
 
-  // Load today's workout or existing log
+  // Load workout for selected date
   useEffect(() => {
-    const todayWorkout = getTodaysWorkout();
-    if (todayWorkout) {
-      setSelectedWorkout(todayWorkout);
-      // Check for existing log
-      db.workoutLogs
+    const loadWorkout = async () => {
+      // Check for existing log on this date
+      const existingLogs = await db.workoutLogs
         .where("date")
-        .equals(today)
-        .and((log) => log.programWorkoutId === todayWorkout.id)
-        .first()
-        .then((existing) => {
-          if (existing) {
-            setExercises(existing.exercises);
-            setActiveWorkoutId(existing.id!);
-          } else {
-            setExercises(createEmptyLog(todayWorkout));
-          }
-        });
-    }
-  }, [today]);
+        .equals(selectedDate)
+        .toArray();
 
-  const selectWorkout = (workout: ProgramWorkout) => {
-    setSelectedWorkout(workout);
-    setExercises(createEmptyLog(workout));
-    setActiveWorkoutId(null);
+      if (existingLogs.length > 0) {
+        const existing = existingLogs[0];
+        const pw = programWorkouts.find((p) => p.id === existing.programWorkoutId);
+        if (pw) {
+          setSelectedWorkout(pw);
+          setExercises(existing.exercises);
+          setActiveWorkoutId(existing.id!);
+          return;
+        }
+      }
+
+      // No existing log — auto-select workout based on day
+      if (!isPastDate) {
+        const todayWorkout = getTodaysWorkout();
+        if (todayWorkout) {
+          setSelectedWorkout(todayWorkout);
+          setExercises(createEmptyLog(todayWorkout));
+          setActiveWorkoutId(null);
+        } else {
+          setSelectedWorkout(null);
+          setExercises([]);
+          setActiveWorkoutId(null);
+        }
+      } else {
+        setSelectedWorkout(null);
+        setExercises([]);
+        setActiveWorkoutId(null);
+      }
+    };
+    loadWorkout();
+  }, [selectedDate, isPastDate]);
+
+  const selectWorkout = async (workout: ProgramWorkout) => {
+    // Check if a log already exists for this workout on this date
+    const existing = await db.workoutLogs
+      .where("date")
+      .equals(selectedDate)
+      .and((log) => log.programWorkoutId === workout.id)
+      .first();
+
+    if (existing) {
+      setSelectedWorkout(workout);
+      setExercises(existing.exercises);
+      setActiveWorkoutId(existing.id!);
+    } else {
+      setSelectedWorkout(workout);
+      setExercises(createEmptyLog(workout));
+      setActiveWorkoutId(null);
+    }
     setShowPicker(false);
   };
 
@@ -86,7 +120,7 @@ export default function WorkoutPage() {
     if (!selectedWorkout) return;
     const log: WorkoutLog = {
       programWorkoutId: selectedWorkout.id,
-      date: today,
+      date: selectedDate,
       exercises,
       completed: exercises.every((ex) => ex.sets.every((s) => s.completed)),
     };
@@ -96,7 +130,7 @@ export default function WorkoutPage() {
       const id = await db.workoutLogs.add(log);
       setActiveWorkoutId(id as number);
     }
-  }, [selectedWorkout, today, exercises, activeWorkoutId]);
+  }, [selectedWorkout, selectedDate, exercises, activeWorkoutId]);
 
   // Auto-save on changes
   useEffect(() => {
@@ -106,11 +140,19 @@ export default function WorkoutPage() {
     }
   }, [exercises, selectedWorkout, saveWorkout]);
 
+  const deleteWorkout = async () => {
+    if (activeWorkoutId) {
+      await db.workoutLogs.delete(activeWorkoutId);
+      setActiveWorkoutId(null);
+      setExercises(selectedWorkout ? createEmptyLog(selectedWorkout) : []);
+    }
+  };
+
   const completedSets = exercises.reduce((sum, ex) => sum + ex.sets.filter((s) => s.completed).length, 0);
   const totalSets = exercises.reduce((sum, ex) => sum + ex.sets.length, 0);
 
-  const dayOfWeek = new Date().getDay();
-  const isRestDay = dayOfWeek === 0;
+  const dayOfWeek = new Date(selectedDate + "T12:00:00").getDay();
+  const isRestDay = dayOfWeek === 0 && !selectedWorkout;
 
   return (
     <div className="space-y-4">
@@ -118,22 +160,75 @@ export default function WorkoutPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold">
-            {isRestDay && !selectedWorkout ? "Rest Day" : selectedWorkout?.name || "Select Workout"}
+            {isRestDay ? "Rest Day" : selectedWorkout?.name || "Select Workout"}
           </h1>
           <p className="text-sm text-muted">
-            {isRestDay && !selectedWorkout
+            {isRestDay
               ? "Recovery & Regeneration"
               : selectedWorkout
-              ? `${selectedWorkout.dayLabel} \u2014 ${selectedWorkout.focusAreas}`
+              ? `${selectedWorkout.focusAreas}`
               : PROGRAM_NAME}
           </p>
         </div>
-        <button
-          onClick={() => setShowPicker(!showPicker)}
-          className="text-xs bg-card border border-card-border rounded-lg px-3 py-1.5 text-muted"
-        >
-          Switch
-        </button>
+        <div className="flex items-center gap-2">
+          {activeWorkoutId && (
+            <button
+              onClick={deleteWorkout}
+              className="text-xs bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg px-3 py-1.5"
+            >
+              Delete
+            </button>
+          )}
+          <button
+            onClick={() => setShowPicker(!showPicker)}
+            className="text-xs bg-card border border-card-border rounded-lg px-3 py-1.5 text-muted"
+          >
+            Switch
+          </button>
+        </div>
+      </div>
+
+      {/* Date picker */}
+      <div className="bg-card border border-card-border rounded-xl p-3">
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => {
+              const d = new Date(selectedDate + "T12:00:00");
+              d.setDate(d.getDate() - 1);
+              setSelectedDate(d.toISOString().split("T")[0]);
+            }}
+            className="text-muted px-2 py-1 rounded-lg active:bg-card-border"
+          >
+            &larr;
+          </button>
+          <div className="flex items-center gap-2">
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="bg-transparent text-sm text-center focus:outline-none"
+            />
+            {isPastDate && (
+              <button
+                onClick={() => setSelectedDate(today)}
+                className="text-[10px] text-accent bg-accent/10 px-2 py-0.5 rounded"
+              >
+                Today
+              </button>
+            )}
+          </div>
+          <button
+            onClick={() => {
+              const d = new Date(selectedDate + "T12:00:00");
+              d.setDate(d.getDate() + 1);
+              const next = d.toISOString().split("T")[0];
+              if (next <= today) setSelectedDate(next);
+            }}
+            className={`text-muted px-2 py-1 rounded-lg active:bg-card-border ${selectedDate >= today ? "opacity-30" : ""}`}
+          >
+            &rarr;
+          </button>
+        </div>
       </div>
 
       {/* Workout picker */}
@@ -154,10 +249,10 @@ export default function WorkoutPage() {
         </div>
       )}
 
-      {isRestDay && !selectedWorkout && (
+      {isRestDay && (
         <div className="bg-card border border-card-border rounded-xl p-6 text-center space-y-2">
           <div className="text-4xl">&#128564;</div>
-          <p className="text-muted text-sm">Sunday is for recovery. Log an activity or pick a workout if you want to train anyway.</p>
+          <p className="text-muted text-sm">Rest day. Log an activity or pick a workout if you want to train anyway.</p>
         </div>
       )}
 
@@ -206,7 +301,6 @@ export default function WorkoutPage() {
                         {programEx.sets} x {programEx.reps}
                       </span>
                     </div>
-                    {/* Sets */}
                     <div className="space-y-1.5">
                       <div className="grid grid-cols-[2rem_1fr_1fr_2.5rem] gap-2 text-[10px] text-muted font-medium uppercase tracking-wider px-1">
                         <span>Set</span>
@@ -257,7 +351,6 @@ export default function WorkoutPage() {
             })}
           </div>
 
-          {/* Complete workout button */}
           {completedSets === totalSets && totalSets > 0 && (
             <div className="bg-success/20 border border-success/30 rounded-xl p-4 text-center">
               <p className="text-success font-bold">Workout Complete!</p>

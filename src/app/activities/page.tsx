@@ -5,28 +5,28 @@ import { db } from "@/lib/db";
 import { ActivityLog, ActivityType, ClimbingType, ClimbingLocation } from "@/lib/types";
 import { useLiveQuery } from "dexie-react-hooks";
 
-const emptyClimbing: Partial<ActivityLog> = {
-  type: "climbing",
-  duration: 60,
-  climbingType: "boulder",
-  climbingLocation: "indoor",
-  grades: "",
-  notes: "",
-};
+const ACTIVITY_TYPES: { value: ActivityType; label: string; color: string; bgColor: string }[] = [
+  { value: "climbing", label: "Climbing", color: "text-amber-400", bgColor: "bg-amber-500/20" },
+  { value: "biking", label: "Biking", color: "text-green-400", bgColor: "bg-green-500/20" },
+  { value: "run", label: "Run", color: "text-blue-400", bgColor: "bg-blue-500/20" },
+  { value: "walk", label: "Walk", color: "text-teal-400", bgColor: "bg-teal-500/20" },
+  { value: "jump-rope", label: "Jump Rope", color: "text-pink-400", bgColor: "bg-pink-500/20" },
+  { value: "stretch", label: "Stretch", color: "text-purple-400", bgColor: "bg-purple-500/20" },
+];
 
-const emptyBiking: Partial<ActivityLog> = {
-  type: "biking",
+function getActivityStyle(type: ActivityType) {
+  return ACTIVITY_TYPES.find((a) => a.value === type) || ACTIVITY_TYPES[0];
+}
+
+const emptyForm: Partial<ActivityLog> = {
   duration: 60,
-  trailName: "",
-  distance: undefined,
-  elevationGain: undefined,
   notes: "",
 };
 
 export default function ActivitiesPage() {
   const [showForm, setShowForm] = useState(false);
   const [activityType, setActivityType] = useState<ActivityType>("climbing");
-  const [form, setForm] = useState<Partial<ActivityLog>>(emptyClimbing);
+  const [form, setForm] = useState<Partial<ActivityLog>>({ ...emptyForm });
   const today = new Date().toISOString().split("T")[0];
 
   const recentActivities = useLiveQuery(
@@ -35,7 +35,12 @@ export default function ActivitiesPage() {
   );
 
   useEffect(() => {
-    setForm(activityType === "climbing" ? { ...emptyClimbing } : { ...emptyBiking });
+    setForm({
+      ...emptyForm,
+      ...(activityType === "climbing" ? { climbingType: "boulder", climbingLocation: "indoor", grades: "" } : {}),
+      ...(activityType === "biking" ? { trailName: "", distance: undefined, elevationGain: undefined } : {}),
+      ...(activityType === "run" ? { distance: undefined } : {}),
+    });
   }, [activityType]);
 
   const handleSave = async () => {
@@ -50,14 +55,18 @@ export default function ActivitiesPage() {
             climbingLocation: form.climbingLocation as ClimbingLocation,
             grades: form.grades,
           }
-        : {
+        : {}),
+      ...(activityType === "biking"
+        ? {
             trailName: form.trailName,
             distance: form.distance,
             elevationGain: form.elevationGain,
-          }),
+          }
+        : {}),
+      ...(activityType === "run" ? { distance: form.distance } : {}),
     };
     await db.activityLogs.add(entry);
-    setForm(activityType === "climbing" ? { ...emptyClimbing } : { ...emptyBiking });
+    setForm({ ...emptyForm });
     setShowForm(false);
   };
 
@@ -70,7 +79,7 @@ export default function ActivitiesPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold">Activities</h1>
-          <p className="text-sm text-muted">Climbing & Mountain Biking</p>
+          <p className="text-sm text-muted">Climbing, Biking, Running & More</p>
         </div>
         <button
           onClick={() => setShowForm(!showForm)}
@@ -82,17 +91,17 @@ export default function ActivitiesPage() {
 
       {showForm && (
         <div className="bg-card border border-card-border rounded-xl p-4 space-y-4">
-          {/* Activity type toggle */}
-          <div className="flex gap-2">
-            {(["climbing", "biking"] as ActivityType[]).map((t) => (
+          {/* Activity type selector */}
+          <div className="grid grid-cols-3 gap-2">
+            {ACTIVITY_TYPES.map((t) => (
               <button
-                key={t}
-                onClick={() => setActivityType(t)}
-                className={`flex-1 py-2 rounded-lg text-sm font-medium capitalize transition-colors ${
-                  activityType === t ? "bg-accent text-white" : "bg-card-border text-muted"
+                key={t.value}
+                onClick={() => setActivityType(t.value)}
+                className={`py-2 rounded-lg text-xs font-medium transition-colors ${
+                  activityType === t.value ? "bg-accent text-white" : "bg-card-border text-muted"
                 }`}
               >
-                {t === "climbing" ? "Climbing" : "Mountain Biking"}
+                {t.label}
               </button>
             ))}
           </div>
@@ -109,6 +118,7 @@ export default function ActivitiesPage() {
             />
           </div>
 
+          {/* Climbing-specific fields */}
           {activityType === "climbing" && (
             <>
               <div className="grid grid-cols-2 gap-3">
@@ -150,6 +160,7 @@ export default function ActivitiesPage() {
             </>
           )}
 
+          {/* Biking-specific fields */}
           {activityType === "biking" && (
             <>
               <div>
@@ -187,7 +198,21 @@ export default function ActivitiesPage() {
             </>
           )}
 
-          {/* Notes */}
+          {/* Run-specific: distance */}
+          {activityType === "run" && (
+            <div>
+              <label className="text-xs text-muted block mb-1">Distance (miles)</label>
+              <input
+                type="number"
+                inputMode="decimal"
+                value={form.distance ?? ""}
+                onChange={(e) => setForm({ ...form, distance: e.target.value ? Number(e.target.value) : undefined })}
+                className="bg-card-border rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-1 focus:ring-accent"
+              />
+            </div>
+          )}
+
+          {/* Notes — all types */}
           <div>
             <label className="text-xs text-muted block mb-1">Notes</label>
             <textarea
@@ -214,46 +239,50 @@ export default function ActivitiesPage() {
         {!recentActivities || recentActivities.length === 0 ? (
           <p className="text-sm text-muted/50 text-center py-8">No activities logged yet</p>
         ) : (
-          recentActivities.map((a) => (
-            <div key={a.id} className="bg-card border border-card-border rounded-xl p-3">
-              <div className="flex items-start justify-between">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className={`text-xs font-bold px-2 py-0.5 rounded ${
-                      a.type === "climbing" ? "bg-amber-500/20 text-amber-400" : "bg-green-500/20 text-green-400"
-                    }`}>
-                      {a.type === "climbing" ? "CLIMB" : "BIKE"}
-                    </span>
-                    <span className="text-xs text-muted">{a.date}</span>
+          recentActivities.map((a) => {
+            const style = getActivityStyle(a.type);
+            return (
+              <div key={a.id} className="bg-card border border-card-border rounded-xl p-3">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded ${style.bgColor} ${style.color}`}>
+                        {style.label.toUpperCase()}
+                      </span>
+                      <span className="text-xs text-muted">{a.date}</span>
+                    </div>
+                    <div className="mt-1 text-sm">
+                      <span className="text-muted">{a.duration} min</span>
+                      {a.type === "climbing" && (
+                        <>
+                          {a.climbingType && <span className="text-muted"> &middot; {a.climbingType}</span>}
+                          {a.climbingLocation && <span className="text-muted"> &middot; {a.climbingLocation}</span>}
+                          {a.grades && <span className="ml-2">{a.grades}</span>}
+                        </>
+                      )}
+                      {a.type === "biking" && (
+                        <>
+                          {a.trailName && <span className="ml-2">{a.trailName}</span>}
+                          {a.distance && <span className="text-muted"> &middot; {a.distance} mi</span>}
+                          {a.elevationGain && <span className="text-muted"> &middot; {a.elevationGain} ft</span>}
+                        </>
+                      )}
+                      {a.type === "run" && a.distance && (
+                        <span className="text-muted"> &middot; {a.distance} mi</span>
+                      )}
+                    </div>
+                    {a.notes && <p className="text-xs text-muted mt-1">{a.notes}</p>}
                   </div>
-                  <div className="mt-1 text-sm">
-                    <span className="text-muted">{a.duration} min</span>
-                    {a.type === "climbing" && (
-                      <>
-                        {a.climbingType && <span className="text-muted"> &middot; {a.climbingType}</span>}
-                        {a.climbingLocation && <span className="text-muted"> &middot; {a.climbingLocation}</span>}
-                        {a.grades && <span className="ml-2">{a.grades}</span>}
-                      </>
-                    )}
-                    {a.type === "biking" && (
-                      <>
-                        {a.trailName && <span className="ml-2">{a.trailName}</span>}
-                        {a.distance && <span className="text-muted"> &middot; {a.distance} mi</span>}
-                        {a.elevationGain && <span className="text-muted"> &middot; {a.elevationGain} ft</span>}
-                      </>
-                    )}
-                  </div>
-                  {a.notes && <p className="text-xs text-muted mt-1">{a.notes}</p>}
+                  <button
+                    onClick={() => a.id && deleteActivity(a.id)}
+                    className="text-muted/50 text-xs px-2 py-1"
+                  >
+                    &#x2715;
+                  </button>
                 </div>
-                <button
-                  onClick={() => a.id && deleteActivity(a.id)}
-                  className="text-muted/50 text-xs px-2 py-1"
-                >
-                  &#x2715;
-                </button>
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </div>

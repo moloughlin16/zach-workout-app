@@ -1,10 +1,23 @@
 "use client";
 
+import { useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
 import { programWorkouts } from "@/lib/workoutData";
+import { WorkoutLog } from "@/lib/types";
+
+const ACTIVITY_LABELS: Record<string, { label: string; color: string; bg: string }> = {
+  climbing: { label: "CLIMB", color: "text-amber-400", bg: "bg-amber-500/20" },
+  biking: { label: "BIKE", color: "text-green-400", bg: "bg-green-500/20" },
+  run: { label: "RUN", color: "text-blue-400", bg: "bg-blue-500/20" },
+  walk: { label: "WALK", color: "text-teal-400", bg: "bg-teal-500/20" },
+  "jump-rope": { label: "JUMP ROPE", color: "text-pink-400", bg: "bg-pink-500/20" },
+  stretch: { label: "STRETCH", color: "text-purple-400", bg: "bg-purple-500/20" },
+};
 
 export default function HistoryPage() {
+  const [expandedWorkout, setExpandedWorkout] = useState<number | null>(null);
+
   const workoutLogs = useLiveQuery(
     () => db.workoutLogs.orderBy("date").reverse().limit(50).toArray(),
     []
@@ -40,6 +53,38 @@ export default function HistoryPage() {
   const totalWorkouts = workoutLogs?.length || 0;
   const totalActivities = activityLogs?.length || 0;
   const currentWeek = Math.min(8, Math.ceil(totalWorkouts / 6) || 1);
+
+  const toggleExpand = (id: number) => {
+    setExpandedWorkout((prev) => (prev === id ? null : id));
+  };
+
+  const renderWorkoutDetail = (w: WorkoutLog) => {
+    const pw = programWorkouts.find((p) => p.id === w.programWorkoutId);
+    return (
+      <div className="mt-2 space-y-2 border-t border-card-border pt-2">
+        {w.exercises.map((ex, i) => {
+          const programEx = pw?.exercises[i];
+          const hasData = ex.sets.some((s) => s.weight !== null || s.reps !== null);
+          if (!hasData) return null;
+          return (
+            <div key={i} className="text-xs">
+              <div className="font-medium mb-0.5">{ex.exerciseName}</div>
+              <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-muted">
+                {ex.sets.map((s, si) => (
+                  <span key={si} className={s.completed ? "text-success" : ""}>
+                    {s.weight || "—"} x {s.reps || programEx?.reps || "—"}
+                  </span>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+        {w.exercises.every((ex) => ex.sets.every((s) => s.weight === null && s.reps === null)) && (
+          <p className="text-xs text-muted/50">No data logged for this workout.</p>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-4">
@@ -105,8 +150,13 @@ export default function HistoryPage() {
                   const pw = programWorkouts.find((p) => p.id === w.programWorkoutId);
                   const completedSets = w.exercises.reduce((s, ex) => s + ex.sets.filter((set) => set.completed).length, 0);
                   const totalSets = w.exercises.reduce((s, ex) => s + ex.sets.length, 0);
+                  const isExpanded = expandedWorkout === w.id;
                   return (
-                    <div key={`w-${i}`} className="bg-card border border-card-border rounded-xl p-3 mb-1">
+                    <button
+                      key={`w-${i}`}
+                      onClick={() => w.id && toggleExpand(w.id)}
+                      className="bg-card border border-card-border rounded-xl p-3 mb-1 w-full text-left"
+                    >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <span className="text-xs font-bold bg-accent/20 text-accent px-2 py-0.5 rounded">
@@ -114,28 +164,33 @@ export default function HistoryPage() {
                           </span>
                           <span className="text-xs text-muted">{pw?.focusAreas}</span>
                         </div>
-                        {w.completed ? (
-                          <span className="text-success text-xs">&#10003;</span>
-                        ) : (
-                          <span className="text-xs text-muted">{completedSets}/{totalSets}</span>
-                        )}
+                        <div className="flex items-center gap-2">
+                          {w.completed ? (
+                            <span className="text-success text-xs">&#10003;</span>
+                          ) : (
+                            <span className="text-xs text-muted">{completedSets}/{totalSets}</span>
+                          )}
+                          <span className="text-muted text-xs">{isExpanded ? "▲" : "▼"}</span>
+                        </div>
                       </div>
-                    </div>
+                      {isExpanded && renderWorkoutDetail(w)}
+                    </button>
                   );
                 } else {
                   const a = entry.data;
+                  const style = ACTIVITY_LABELS[a.type] || ACTIVITY_LABELS.climbing;
                   return (
                     <div key={`a-${i}`} className="bg-card border border-card-border rounded-xl p-3 mb-1">
                       <div className="flex items-center gap-2">
-                        <span className={`text-xs font-bold px-2 py-0.5 rounded ${
-                          a.type === "climbing" ? "bg-amber-500/20 text-amber-400" : "bg-green-500/20 text-green-400"
-                        }`}>
-                          {a.type === "climbing" ? "CLIMB" : "BIKE"}
+                        <span className={`text-xs font-bold px-2 py-0.5 rounded ${style.bg} ${style.color}`}>
+                          {style.label}
                         </span>
                         <span className="text-xs text-muted">{a.duration} min</span>
                         {a.type === "climbing" && a.grades && <span className="text-xs">{a.grades}</span>}
                         {a.type === "biking" && a.trailName && <span className="text-xs">{a.trailName}</span>}
+                        {a.type === "run" && a.distance && <span className="text-xs">{a.distance} mi</span>}
                       </div>
+                      {a.notes && <p className="text-xs text-muted mt-1">{a.notes}</p>}
                     </div>
                   );
                 }
