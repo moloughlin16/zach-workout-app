@@ -13,10 +13,10 @@ const ALL_EXERCISES = Array.from(
 
 // Pick key compound lifts for the default chart view
 const KEY_EXERCISES = [
-  "Incline Dumbbell Press",
-  "T-Bar Row",
+  "Incline Barbell Press",
   "Barbell Row",
-  "Heels Elevated Dumbbell Squat",
+  "Reverse Grip Barbell Row",
+  "Barbell Squat",
   "Goblet Squat",
   "Dumbbell Arnold Press",
   "Pull Up",

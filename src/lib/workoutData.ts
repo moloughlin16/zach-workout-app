@@ -11,7 +11,7 @@ export const programWorkouts: ProgramWorkout[] = [
     dayLabel: "Monday",
     focusAreas: "Chest, Triceps, Biceps",
     exercises: [
-      { name: "Incline Dumbbell Press", sets: "5", reps: "10" },
+      { name: "Incline Barbell Press", sets: "5", reps: "10" },
       { name: "Incline Dumbbell Fly", sets: "4", reps: "10" },
       { name: "Dumbbell Press", sets: "3", reps: "10" },
       { name: "Incline EZ Bar Skullcrusher", sets: "3", reps: "10", supersetGroup: "A", supersetOrder: 1 },
@@ -29,7 +29,7 @@ export const programWorkouts: ProgramWorkout[] = [
     dayLabel: "Tuesday",
     focusAreas: "Back, Shoulders",
     exercises: [
-      { name: "T-Bar Row", sets: "5", reps: "10" },
+      { name: "Barbell Row", sets: "5", reps: "10" },
       { name: "Pull Up", sets: "4", reps: "10" },
       { name: "Bent Over Dumbbell Row", sets: "3", reps: "10" },
       { name: "Dumbbell Arnold Press", sets: "5", reps: "10" },
@@ -44,7 +44,7 @@ export const programWorkouts: ProgramWorkout[] = [
     dayLabel: "Wednesday",
     focusAreas: "Legs, Abs",
     exercises: [
-      { name: "Heels Elevated Dumbbell Squat", sets: "5", reps: "10" },
+      { name: "Barbell Squat", sets: "5", reps: "10" },
       { name: "Split Squat", sets: "4", reps: "10" },
       { name: "Leg Curl", sets: "3", reps: "10" },
       { name: "Calf Raise", sets: "3", reps: "15" },
@@ -78,7 +78,7 @@ export const programWorkouts: ProgramWorkout[] = [
     dayLabel: "Friday",
     focusAreas: "Back, Shoulders",
     exercises: [
-      { name: "Barbell Row", sets: "5", reps: "10" },
+      { name: "Reverse Grip Barbell Row", sets: "5", reps: "10" },
       { name: "Wide Grip Pull Up", sets: "4", reps: "10" },
       { name: "Cable Row", sets: "3", reps: "10" },
       { name: "Dumbbell Side Laterals", sets: "5", reps: "10" },
