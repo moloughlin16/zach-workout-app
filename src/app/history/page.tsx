@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
 import { programWorkouts } from "@/lib/workoutData";
@@ -56,6 +57,12 @@ export default function HistoryPage() {
 
   const toggleExpand = (id: number) => {
     setExpandedWorkout((prev) => (prev === id ? null : id));
+  };
+
+  const deleteWorkout = async (id: number) => {
+    if (!confirm("Delete this workout? This cannot be undone.")) return;
+    await db.workoutLogs.delete(id);
+    setExpandedWorkout((prev) => (prev === id ? null : prev));
   };
 
   const renderWorkoutDetail = (w: WorkoutLog) => {
@@ -152,29 +159,51 @@ export default function HistoryPage() {
                   const totalSets = w.exercises.reduce((s, ex) => s + ex.sets.length, 0);
                   const isExpanded = expandedWorkout === w.id;
                   return (
-                    <button
+                    <div
                       key={`w-${i}`}
-                      onClick={() => w.id && toggleExpand(w.id)}
-                      className="bg-card border border-card-border rounded-xl p-3 mb-1 w-full text-left"
+                      className="bg-card border border-card-border rounded-xl p-3 mb-1"
                     >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold bg-accent/20 text-accent px-2 py-0.5 rounded">
-                            {pw?.name || `Workout ${w.programWorkoutId}`}
-                          </span>
-                          <span className="text-xs text-muted">{pw?.focusAreas}</span>
+                      <button
+                        onClick={() => w.id && toggleExpand(w.id)}
+                        className="w-full text-left"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold bg-accent/20 text-accent px-2 py-0.5 rounded">
+                              {pw?.name || `Workout ${w.programWorkoutId}`}
+                            </span>
+                            <span className="text-xs text-muted">{pw?.focusAreas}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {w.completed ? (
+                              <span className="text-success text-xs">&#10003;</span>
+                            ) : (
+                              <span className="text-xs text-muted">{completedSets}/{totalSets}</span>
+                            )}
+                            <span className="text-muted text-xs">{isExpanded ? "▲" : "▼"}</span>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          {w.completed ? (
-                            <span className="text-success text-xs">&#10003;</span>
-                          ) : (
-                            <span className="text-xs text-muted">{completedSets}/{totalSets}</span>
-                          )}
-                          <span className="text-muted text-xs">{isExpanded ? "▲" : "▼"}</span>
-                        </div>
-                      </div>
-                      {isExpanded && renderWorkoutDetail(w)}
-                    </button>
+                      </button>
+                      {isExpanded && (
+                        <>
+                          {renderWorkoutDetail(w)}
+                          <div className="flex gap-2 mt-3 pt-2 border-t border-card-border">
+                            <Link
+                              href={`/?date=${w.date}`}
+                              className="flex-1 text-center text-xs bg-card-border text-foreground rounded-lg px-3 py-1.5 active:opacity-70"
+                            >
+                              Edit
+                            </Link>
+                            <button
+                              onClick={() => w.id && deleteWorkout(w.id)}
+                              className="flex-1 text-xs bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg px-3 py-1.5 active:opacity-70"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
                   );
                 } else {
                   const a = entry.data;

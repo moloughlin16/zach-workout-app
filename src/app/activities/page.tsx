@@ -18,16 +18,18 @@ function getActivityStyle(type: ActivityType) {
   return ACTIVITY_TYPES.find((a) => a.value === type) || ACTIVITY_TYPES[0];
 }
 
-const emptyForm: Partial<ActivityLog> = {
+const today = () => new Date().toISOString().split("T")[0];
+
+const emptyForm = (): Partial<ActivityLog> => ({
   duration: 60,
   notes: "",
-};
+  date: today(),
+});
 
 export default function ActivitiesPage() {
   const [showForm, setShowForm] = useState(false);
   const [activityType, setActivityType] = useState<ActivityType>("climbing");
-  const [form, setForm] = useState<Partial<ActivityLog>>({ ...emptyForm });
-  const today = new Date().toISOString().split("T")[0];
+  const [form, setForm] = useState<Partial<ActivityLog>>(() => emptyForm());
 
   const recentActivities = useLiveQuery(
     () => db.activityLogs.orderBy("date").reverse().limit(20).toArray(),
@@ -35,18 +37,19 @@ export default function ActivitiesPage() {
   );
 
   useEffect(() => {
-    setForm({
-      ...emptyForm,
+    setForm((prev) => ({
+      ...emptyForm(),
+      date: prev.date ?? today(),
       ...(activityType === "climbing" ? { climbingType: "boulder", climbingLocation: "indoor", grades: "" } : {}),
       ...(activityType === "biking" ? { trailName: "", distance: undefined, elevationGain: undefined } : {}),
       ...(activityType === "run" ? { distance: undefined } : {}),
-    });
+    }));
   }, [activityType]);
 
   const handleSave = async () => {
     const entry: ActivityLog = {
       type: activityType,
-      date: today,
+      date: form.date || today(),
       duration: form.duration || 60,
       notes: form.notes || "",
       ...(activityType === "climbing"
@@ -66,7 +69,7 @@ export default function ActivitiesPage() {
       ...(activityType === "run" ? { distance: form.distance } : {}),
     };
     await db.activityLogs.add(entry);
-    setForm({ ...emptyForm });
+    setForm(emptyForm());
     setShowForm(false);
   };
 
@@ -104,6 +107,18 @@ export default function ActivitiesPage() {
                 {t.label}
               </button>
             ))}
+          </div>
+
+          {/* Date */}
+          <div>
+            <label className="text-xs text-muted block mb-1">Date</label>
+            <input
+              type="date"
+              value={form.date || today()}
+              max={today()}
+              onChange={(e) => setForm({ ...form, date: e.target.value })}
+              className="bg-card-border rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-1 focus:ring-accent"
+            />
           </div>
 
           {/* Duration */}

@@ -27,6 +27,17 @@ export default function WorkoutPage() {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
   const today = new Date().toISOString().split("T")[0];
   const isPastDate = selectedDate !== today;
+  const isStarted = activeWorkoutId !== null;
+
+  // Allow deep-linking to a specific date (e.g. from History "Edit")
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const dateParam = params.get("date");
+    if (dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
+      setSelectedDate(dateParam);
+    }
+  }, []);
 
   // Load workout for selected date
   useEffect(() => {
@@ -117,28 +128,36 @@ export default function WorkoutPage() {
   }, []);
 
   const saveWorkout = useCallback(async () => {
-    if (!selectedWorkout) return;
+    if (!selectedWorkout || !activeWorkoutId) return;
     const log: WorkoutLog = {
+      id: activeWorkoutId,
       programWorkoutId: selectedWorkout.id,
       date: selectedDate,
       exercises,
       completed: exercises.every((ex) => ex.sets.every((s) => s.completed)),
     };
-    if (activeWorkoutId) {
-      await db.workoutLogs.put({ ...log, id: activeWorkoutId });
-    } else {
-      const id = await db.workoutLogs.add(log);
-      setActiveWorkoutId(id as number);
-    }
+    await db.workoutLogs.put(log);
   }, [selectedWorkout, selectedDate, exercises, activeWorkoutId]);
 
-  // Auto-save on changes
+  const startWorkout = async () => {
+    if (!selectedWorkout || activeWorkoutId) return;
+    const log: WorkoutLog = {
+      programWorkoutId: selectedWorkout.id,
+      date: selectedDate,
+      exercises,
+      completed: false,
+    };
+    const id = await db.workoutLogs.add(log);
+    setActiveWorkoutId(id as number);
+  };
+
+  // Auto-save on changes — only after the workout has been started
   useEffect(() => {
-    if (selectedWorkout && exercises.length > 0) {
+    if (activeWorkoutId && selectedWorkout && exercises.length > 0) {
       const timer = setTimeout(saveWorkout, 500);
       return () => clearTimeout(timer);
     }
-  }, [exercises, selectedWorkout, saveWorkout]);
+  }, [exercises, selectedWorkout, activeWorkoutId, saveWorkout]);
 
   const deleteWorkout = async () => {
     if (activeWorkoutId) {
@@ -256,24 +275,35 @@ export default function WorkoutPage() {
         </div>
       )}
 
+      {selectedWorkout && !isStarted && (
+        <button
+          onClick={startWorkout}
+          className="w-full bg-accent text-white py-3 rounded-xl text-sm font-semibold active:opacity-80"
+        >
+          Start Workout
+        </button>
+      )}
+
       {selectedWorkout && (
         <>
           {/* Progress bar */}
-          <div className="bg-card border border-card-border rounded-xl p-3">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs text-muted">Progress</span>
-              <span className="text-xs font-mono text-muted">{completedSets}/{totalSets} sets</span>
+          {isStarted && (
+            <div className="bg-card border border-card-border rounded-xl p-3">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs text-muted">Progress</span>
+                <span className="text-xs font-mono text-muted">{completedSets}/{totalSets} sets</span>
+              </div>
+              <div className="h-2 bg-card-border rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-accent rounded-full transition-all duration-300"
+                  style={{ width: totalSets > 0 ? `${(completedSets / totalSets) * 100}%` : "0%" }}
+                />
+              </div>
             </div>
-            <div className="h-2 bg-card-border rounded-full overflow-hidden">
-              <div
-                className="h-full bg-accent rounded-full transition-all duration-300"
-                style={{ width: totalSets > 0 ? `${(completedSets / totalSets) * 100}%` : "0%" }}
-              />
-            </div>
-          </div>
+          )}
 
           {/* Rest Timer */}
-          <RestTimer />
+          {isStarted && <RestTimer />}
 
           {/* Exercises */}
           <div className="space-y-3">
@@ -313,7 +343,7 @@ export default function WorkoutPage() {
                           key={setIndex}
                           className={`grid grid-cols-[2rem_1fr_1fr_2.5rem] gap-2 items-center rounded-lg px-1 py-1 ${
                             set.completed ? "bg-success/10" : ""
-                          }`}
+                          } ${!isStarted ? "opacity-50" : ""}`}
                         >
                           <span className="text-xs text-muted text-center">{set.setNumber}</span>
                           <input
@@ -321,24 +351,27 @@ export default function WorkoutPage() {
                             inputMode="decimal"
                             placeholder="—"
                             value={set.weight ?? ""}
+                            disabled={!isStarted}
                             onChange={(e) => updateSet(exIndex, setIndex, "weight", e.target.value)}
-                            className="bg-card-border rounded-lg px-2 py-1.5 text-sm text-center w-full focus:outline-none focus:ring-1 focus:ring-accent"
+                            className="bg-card-border rounded-lg px-2 py-1.5 text-sm text-center w-full focus:outline-none focus:ring-1 focus:ring-accent disabled:cursor-not-allowed"
                           />
                           <input
                             type="number"
                             inputMode="numeric"
                             placeholder={programEx.reps}
                             value={set.reps ?? ""}
+                            disabled={!isStarted}
                             onChange={(e) => updateSet(exIndex, setIndex, "reps", e.target.value)}
-                            className="bg-card-border rounded-lg px-2 py-1.5 text-sm text-center w-full focus:outline-none focus:ring-1 focus:ring-accent"
+                            className="bg-card-border rounded-lg px-2 py-1.5 text-sm text-center w-full focus:outline-none focus:ring-1 focus:ring-accent disabled:cursor-not-allowed"
                           />
                           <button
                             onClick={() => toggleSet(exIndex, setIndex)}
+                            disabled={!isStarted}
                             className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm transition-colors ${
                               set.completed
                                 ? "bg-success text-white"
                                 : "bg-card-border text-muted"
-                            }`}
+                            } disabled:cursor-not-allowed`}
                           >
                             {set.completed ? "\u2713" : ""}
                           </button>
