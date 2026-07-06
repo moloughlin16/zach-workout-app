@@ -27,6 +27,13 @@ export interface LoggedExercise {
   exerciseName: string;
   sets: LoggedSet[];
   notes?: string;
+  // Display targets carried with the logged exercise so a workout's
+  // exercise list can be edited (added/swapped/deleted) independent of
+  // the static program template.
+  targetSets?: string;
+  targetReps?: string;
+  supersetGroup?: string;
+  supersetOrder?: number;
 }
 
 export interface WorkoutLog {
@@ -37,6 +44,7 @@ export interface WorkoutLog {
   startTime?: string;
   endTime?: string;
   notes?: string;
+  feeling?: number; // 1-5 self-rated scale
   completed: boolean;
 }
 

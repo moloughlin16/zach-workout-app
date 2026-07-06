@@ -1,21 +1,39 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { programWorkouts, getTodaysWorkout, PROGRAM_NAME } from "@/lib/workoutData";
+import { programWorkouts, getTodaysWorkout, PROGRAM_NAME, EXERCISE_LIBRARY } from "@/lib/workoutData";
 import { db } from "@/lib/db";
 import { WorkoutLog, LoggedExercise, LoggedSet, ProgramWorkout } from "@/lib/types";
 import RestTimer from "@/components/RestTimer";
 
+const FEELING_OPTIONS: { value: number; emoji: string; label: string }[] = [
+  { value: 1, emoji: "\u{1F62B}", label: "Awful" },
+  { value: 2, emoji: "\u{1F641}", label: "Rough" },
+  { value: 3, emoji: "\u{1F610}", label: "Okay" },
+  { value: 4, emoji: "\u{1F642}", label: "Good" },
+  { value: 5, emoji: "\u{1F4AA}", label: "Great" },
+];
+
+function makeEmptySets(numSets: number): LoggedSet[] {
+  return Array.from({ length: numSets }, (_, i) => ({
+    setNumber: i + 1,
+    weight: null,
+    reps: null,
+    completed: false,
+  }));
+}
+
 function createEmptyLog(workout: ProgramWorkout): LoggedExercise[] {
   return workout.exercises.map((ex) => {
     const numSets = parseInt(ex.sets) || 3;
-    const sets: LoggedSet[] = Array.from({ length: numSets }, (_, i) => ({
-      setNumber: i + 1,
-      weight: null,
-      reps: null,
-      completed: false,
-    }));
-    return { exerciseName: ex.name, sets };
+    return {
+      exerciseName: ex.name,
+      targetSets: ex.sets,
+      targetReps: ex.reps,
+      supersetGroup: ex.supersetGroup,
+      supersetOrder: ex.supersetOrder,
+      sets: makeEmptySets(numSets),
+    };
   });
 }
 
@@ -25,6 +43,10 @@ export default function WorkoutPage() {
   const [activeWorkoutId, setActiveWorkoutId] = useState<number | null>(null);
   const [showPicker, setShowPicker] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
+  const [feeling, setFeeling] = useState<number | null>(null);
+  const [notes, setNotes] = useState("");
+  const [exercisePicker, setExercisePicker] = useState<{ mode: "add" } | { mode: "swap"; index: number } | null>(null);
+  const [exerciseSearch, setExerciseSearch] = useState("");
   const today = new Date().toISOString().split("T")[0];
   const isPastDate = selectedDate !== today;
   const isStarted = activeWorkoutId !== null;
@@ -55,6 +77,8 @@ export default function WorkoutPage() {
           setSelectedWorkout(pw);
           setExercises(existing.exercises);
           setActiveWorkoutId(existing.id!);
+          setFeeling(existing.feeling ?? null);
+          setNotes(existing.notes ?? "");
           return;
         }
       }
@@ -76,6 +100,8 @@ export default function WorkoutPage() {
         setExercises([]);
         setActiveWorkoutId(null);
       }
+      setFeeling(null);
+      setNotes("");
     };
     loadWorkout();
   }, [selectedDate, isPastDate]);
@@ -92,12 +118,55 @@ export default function WorkoutPage() {
       setSelectedWorkout(workout);
       setExercises(existing.exercises);
       setActiveWorkoutId(existing.id!);
+      setFeeling(existing.feeling ?? null);
+      setNotes(existing.notes ?? "");
     } else {
       setSelectedWorkout(workout);
       setExercises(createEmptyLog(workout));
       setActiveWorkoutId(null);
+      setFeeling(null);
+      setNotes("");
     }
     setShowPicker(false);
+  };
+
+  const addExercise = (name: string) => {
+    setExercises((prev) => [
+      ...prev,
+      { exerciseName: name, targetSets: "3", targetReps: "10", sets: makeEmptySets(3) },
+    ]);
+  };
+
+  const removeExercise = (index: number) => {
+    setExercises((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const swapExercise = (index: number, name: string) => {
+    setExercises((prev) => {
+      const next = [...prev];
+      const old = next[index];
+      const numSets = old.sets.length || 3;
+      next[index] = {
+        exerciseName: name,
+        targetSets: old.targetSets,
+        targetReps: old.targetReps,
+        supersetGroup: old.supersetGroup,
+        supersetOrder: old.supersetOrder,
+        sets: makeEmptySets(numSets),
+      };
+      return next;
+    });
+  };
+
+  const handlePickExercise = (name: string) => {
+    if (!exercisePicker) return;
+    if (exercisePicker.mode === "add") {
+      addExercise(name);
+    } else {
+      swapExercise(exercisePicker.index, name);
+    }
+    setExercisePicker(null);
+    setExerciseSearch("");
   };
 
   const updateSet = useCallback(
@@ -134,10 +203,12 @@ export default function WorkoutPage() {
       programWorkoutId: selectedWorkout.id,
       date: selectedDate,
       exercises,
-      completed: exercises.every((ex) => ex.sets.every((s) => s.completed)),
+      feeling: feeling ?? undefined,
+      notes: notes || undefined,
+      completed: exercises.length > 0 && exercises.every((ex) => ex.sets.every((s) => s.completed)),
     };
     await db.workoutLogs.put(log);
-  }, [selectedWorkout, selectedDate, exercises, activeWorkoutId]);
+  }, [selectedWorkout, selectedDate, exercises, feeling, notes, activeWorkoutId]);
 
   const startWorkout = async () => {
     if (!selectedWorkout || activeWorkoutId) return;
@@ -145,6 +216,8 @@ export default function WorkoutPage() {
       programWorkoutId: selectedWorkout.id,
       date: selectedDate,
       exercises,
+      feeling: feeling ?? undefined,
+      notes: notes || undefined,
       completed: false,
     };
     const id = await db.workoutLogs.add(log);
@@ -157,13 +230,15 @@ export default function WorkoutPage() {
       const timer = setTimeout(saveWorkout, 500);
       return () => clearTimeout(timer);
     }
-  }, [exercises, selectedWorkout, activeWorkoutId, saveWorkout]);
+  }, [exercises, feeling, notes, selectedWorkout, activeWorkoutId, saveWorkout]);
 
   const deleteWorkout = async () => {
     if (activeWorkoutId) {
       await db.workoutLogs.delete(activeWorkoutId);
       setActiveWorkoutId(null);
       setExercises(selectedWorkout ? createEmptyLog(selectedWorkout) : []);
+      setFeeling(null);
+      setNotes("");
     }
   };
 
@@ -307,29 +382,40 @@ export default function WorkoutPage() {
 
           {/* Exercises */}
           <div className="space-y-3">
-            {selectedWorkout.exercises.map((programEx, exIndex) => {
-              const loggedEx = exercises[exIndex];
-              if (!loggedEx) return null;
-
-              const isSupersetStart = programEx.supersetGroup && programEx.supersetOrder === 1;
-              const isInSuperset = !!programEx.supersetGroup;
+            {exercises.map((loggedEx, exIndex) => {
+              const isSupersetStart = loggedEx.supersetGroup && loggedEx.supersetOrder === 1;
+              const isInSuperset = !!loggedEx.supersetGroup;
 
               return (
                 <div key={exIndex}>
                   {isSupersetStart && (
                     <div className="flex items-center gap-2 mb-1 mt-2">
                       <span className="text-[10px] font-bold text-accent bg-accent/10 px-2 py-0.5 rounded">
-                        SUPERSET {programEx.supersetGroup}
+                        SUPERSET {loggedEx.supersetGroup}
                       </span>
                       <div className="flex-1 h-px bg-card-border" />
                     </div>
                   )}
                   <div className={`bg-card border border-card-border rounded-xl p-3 ${isInSuperset ? "ml-2 border-l-2 border-l-accent/30" : ""}`}>
                     <div className="flex items-center justify-between mb-2">
-                      <h3 className="text-sm font-semibold">{programEx.name}</h3>
-                      <span className="text-[10px] text-muted">
-                        {programEx.sets} x {programEx.reps}
-                      </span>
+                      <h3 className="text-sm font-semibold">{loggedEx.exerciseName}</h3>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-[10px] text-muted">
+                          {loggedEx.targetSets} x {loggedEx.targetReps}
+                        </span>
+                        <button
+                          onClick={() => setExercisePicker({ mode: "swap", index: exIndex })}
+                          className="text-[10px] bg-card-border text-muted rounded px-1.5 py-0.5"
+                        >
+                          Swap
+                        </button>
+                        <button
+                          onClick={() => removeExercise(exIndex)}
+                          className="text-[10px] bg-red-500/20 text-red-400 rounded px-1.5 py-0.5"
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </div>
                     <div className="space-y-1.5">
                       <div className="grid grid-cols-[2rem_1fr_1fr_2.5rem] gap-2 text-[10px] text-muted font-medium uppercase tracking-wider px-1">
@@ -358,7 +444,7 @@ export default function WorkoutPage() {
                           <input
                             type="number"
                             inputMode="numeric"
-                            placeholder={programEx.reps}
+                            placeholder={loggedEx.targetReps}
                             value={set.reps ?? ""}
                             disabled={!isStarted}
                             onChange={(e) => updateSet(exIndex, setIndex, "reps", e.target.value)}
@@ -384,13 +470,108 @@ export default function WorkoutPage() {
             })}
           </div>
 
+          <button
+            onClick={() => setExercisePicker({ mode: "add" })}
+            className="w-full border border-dashed border-card-border rounded-xl py-2.5 text-xs text-muted active:bg-card-border"
+          >
+            + Add Exercise
+          </button>
+
           {completedSets === totalSets && totalSets > 0 && (
             <div className="bg-success/20 border border-success/30 rounded-xl p-4 text-center">
               <p className="text-success font-bold">Workout Complete!</p>
               <p className="text-success/70 text-xs mt-1">All sets logged and saved automatically.</p>
             </div>
           )}
+
+          {/* Feeling + notes */}
+          <div className="bg-card border border-card-border rounded-xl p-3 space-y-3">
+            <div>
+              <h3 className="text-sm font-semibold mb-2">How did it feel?</h3>
+              <div className="flex justify-between gap-2">
+                {FEELING_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setFeeling(opt.value)}
+                    disabled={!isStarted}
+                    title={opt.label}
+                    className={`flex-1 py-2 rounded-lg text-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                      feeling === opt.value ? "bg-accent/20 ring-1 ring-accent" : "bg-card-border"
+                    }`}
+                  >
+                    {opt.emoji}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold mb-2">Notes</h3>
+              <textarea
+                value={notes}
+                disabled={!isStarted}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="How was the workout? Anything to remember for next time..."
+                rows={3}
+                className="bg-card-border rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-1 focus:ring-accent disabled:cursor-not-allowed resize-none"
+              />
+            </div>
+          </div>
         </>
+      )}
+
+      {/* Exercise picker modal (add / swap) */}
+      {exercisePicker && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4"
+          onClick={() => { setExercisePicker(null); setExerciseSearch(""); }}
+        >
+          <div
+            className="bg-card border border-card-border rounded-t-xl sm:rounded-xl w-full sm:max-w-sm max-h-[75vh] overflow-y-auto p-3"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-semibold">
+                {exercisePicker.mode === "add" ? "Add Exercise" : "Swap Exercise"}
+              </h3>
+              <button
+                onClick={() => { setExercisePicker(null); setExerciseSearch(""); }}
+                className="text-muted text-xs"
+              >
+                Close
+              </button>
+            </div>
+            <input
+              type="text"
+              autoFocus
+              placeholder="Search or type a custom name..."
+              value={exerciseSearch}
+              onChange={(e) => setExerciseSearch(e.target.value)}
+              className="bg-card-border rounded-lg px-3 py-2 text-sm w-full mb-2 focus:outline-none focus:ring-1 focus:ring-accent"
+            />
+            <div className="space-y-1">
+              {exerciseSearch.trim() &&
+                !EXERCISE_LIBRARY.some((n) => n.toLowerCase() === exerciseSearch.trim().toLowerCase()) && (
+                  <button
+                    onClick={() => handlePickExercise(exerciseSearch.trim())}
+                    className="w-full text-left px-3 py-2 rounded-lg text-sm text-accent active:bg-card-border"
+                  >
+                    Use &ldquo;{exerciseSearch.trim()}&rdquo;
+                  </button>
+                )}
+              {EXERCISE_LIBRARY.filter((name) =>
+                name.toLowerCase().includes(exerciseSearch.trim().toLowerCase())
+              ).map((name) => (
+                <button
+                  key={name}
+                  onClick={() => handlePickExercise(name)}
+                  className="w-full text-left px-3 py-2 rounded-lg text-sm active:bg-card-border"
+                >
+                  {name}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

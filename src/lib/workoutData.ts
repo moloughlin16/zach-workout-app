@@ -105,6 +105,31 @@ export const programWorkouts: ProgramWorkout[] = [
   },
 ];
 
+// Full set of exercises selectable when adding or swapping exercises in a
+// logged workout — every exercise already in the program plus extras Zach
+// wants available.
+export const EXERCISE_LIBRARY: string[] = Array.from(
+  new Set([
+    ...programWorkouts.flatMap((w) => w.exercises.map((e) => e.name)),
+    "Dips",
+    "Incline Bench",
+    "Incline DB Bench",
+    "RDLs",
+    "Bulgarian Split Squats",
+    "Pistol Squats",
+    "Leg Extensions",
+    "Weighted Situps",
+    "Weighted Decline Situps",
+    "Leg Raises",
+    "Prayer Crunches",
+    "Back Extensions",
+    "Bicycles",
+    "Deadbugs",
+    "Rowing",
+    "MMA Forearm Routine",
+  ])
+).sort();
+
 // Map day of week (0=Sun, 1=Mon, ..., 6=Sat) to workout
 export function getTodaysWorkout(): ProgramWorkout | null {
   const dayOfWeek = new Date().getDay();

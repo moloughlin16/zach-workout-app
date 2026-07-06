@@ -7,6 +7,14 @@ import { db } from "@/lib/db";
 import { programWorkouts } from "@/lib/workoutData";
 import { WorkoutLog } from "@/lib/types";
 
+const FEELING_EMOJI: Record<number, string> = {
+  1: "\u{1F62B}",
+  2: "\u{1F641}",
+  3: "\u{1F610}",
+  4: "\u{1F642}",
+  5: "\u{1F4AA}",
+};
+
 const ACTIVITY_LABELS: Record<string, { label: string; color: string; bg: string }> = {
   climbing: { label: "CLIMB", color: "text-amber-400", bg: "bg-amber-500/20" },
   biking: { label: "BIKE", color: "text-green-400", bg: "bg-green-500/20" },
@@ -66,11 +74,9 @@ export default function HistoryPage() {
   };
 
   const renderWorkoutDetail = (w: WorkoutLog) => {
-    const pw = programWorkouts.find((p) => p.id === w.programWorkoutId);
     return (
       <div className="mt-2 space-y-2 border-t border-card-border pt-2">
         {w.exercises.map((ex, i) => {
-          const programEx = pw?.exercises[i];
           const hasData = ex.sets.some((s) => s.weight !== null || s.reps !== null);
           if (!hasData) return null;
           return (
@@ -79,7 +85,7 @@ export default function HistoryPage() {
               <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-muted">
                 {ex.sets.map((s, si) => (
                   <span key={si} className={s.completed ? "text-success" : ""}>
-                    {s.weight || "—"} x {s.reps || programEx?.reps || "—"}
+                    {s.weight || "—"} x {s.reps || ex.targetReps || "—"}
                   </span>
                 ))}
               </div>
@@ -89,6 +95,13 @@ export default function HistoryPage() {
         {w.exercises.every((ex) => ex.sets.every((s) => s.weight === null && s.reps === null)) && (
           <p className="text-xs text-muted/50">No data logged for this workout.</p>
         )}
+        {w.feeling && (
+          <div className="flex items-center gap-2 pt-1">
+            <span className="text-xs text-muted">Felt:</span>
+            <span className="text-base">{FEELING_EMOJI[w.feeling]}</span>
+          </div>
+        )}
+        {w.notes && <p className="text-xs text-muted italic">&ldquo;{w.notes}&rdquo;</p>}
       </div>
     );
   };

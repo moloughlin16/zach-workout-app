@@ -4,11 +4,12 @@ import { useState, useRef } from "react";
 import { db } from "@/lib/db";
 import { WeightEntry, ProgressPhoto } from "@/lib/types";
 import { useLiveQuery } from "dexie-react-hooks";
-import { programWorkouts } from "@/lib/workoutData";
+import { programWorkouts, EXERCISE_LIBRARY } from "@/lib/workoutData";
 
-// Get unique exercise names across all workouts
+// Get unique exercise names across all workouts, plus the full swap/add library
+// so exercises swapped into a workout still get progress charts.
 const ALL_EXERCISES = Array.from(
-  new Set(programWorkouts.flatMap((w) => w.exercises.map((e) => e.name)))
+  new Set([...programWorkouts.flatMap((w) => w.exercises.map((e) => e.name)), ...EXERCISE_LIBRARY])
 );
 
 // Pick key compound lifts for the default chart view
