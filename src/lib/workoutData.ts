@@ -121,6 +121,7 @@ export const EXERCISE_LIBRARY: string[] = Array.from(
     "Weighted Situps",
     "Weighted Decline Situps",
     "Leg Raises",
+    "Planks",
     "Prayer Crunches",
     "Back Extensions",
     "Bicycles",
